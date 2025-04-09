@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Attendance System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>Attendance Portal</h2>
+            <button onclick="startAttendance()">Start Attendance</button>
+            <button onclick="stopAttendance()" id="stop-btn" style="display:none;">Stop Attendance</button>
+            <div class="form-group">
+                <label for="new-user">Register New User</label>
+                <input type="text" id="new-user" placeholder="Enter name">
+                <button onclick="startTraining()">Register</button>
+            </div>
+            <h3>Attendance Log</h3>
+            <div class="log">
+                {% if log %}
+                    {% for date, records in log.items() %}
+                        <h4>{{ date }}</h4>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Time</th>
+                                    <th>Photo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for record in records %}
+                                    <tr>
+                                        <td>{{ record.name }}</td>
+                                        <td>{{ record.time }}</td>
+                                        <td><img src="/{{ record.photo }}" alt="{{ record.name }}" width="50" height="50"></td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% endfor %}
+                {% else %}
+                    <p>No attendance records yet.</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="main">
+            <h1 id="title">Local Attendance System</h1>
+            <img id="video" style="display:none; width:100%; max-width:1280px; height:auto;" src="">
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const title = document.getElementById('title');
+        const stopBtn = document.getElementById('stop-btn');
+
+        function startAttendance() {
+            fetch('/start_attendance', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    title.style.display = 'none';
+                    video.style.display = 'block';
+                    video.src = '/video_feed/attendance';
+                    stopBtn.style.display = 'block';
+                });
+        }
+
+        function startTraining() {
+            const name = document.getElementById('new-user').value;
+            if (!name) {
+                alert('Please enter a name');
+                return;
+            }
+            fetch('/start_training', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `name=${encodeURIComponent(name)}`
+            })
+                .then(response => response.json())
+                .then(data => {
+                    title.style.display = 'none';
+                    video.style.display = 'block';
+                    video.src = '/video_feed/training';
+                    stopBtn.style.display = 'block';
+                });
+        }
+
+        function stopAttendance() {
+            fetch('/stop', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    video.style.display = 'none';
+                    title.style.display = 'block';
+                    stopBtn.style.display = 'none';
+                    location.reload();
+                });
+        }
+    </script>
+</body>
+</html>
