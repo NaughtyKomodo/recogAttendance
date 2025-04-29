@@ -4,6 +4,10 @@ import numpy as np
 import os
 import json
 import datetime
+from openpyxl import Workbook
+from openpyxl.drawing.image import Image
+from openpyxl.styles import Border, Side, Alignment
+from io import BytesIO
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 classifier = 'haarcascade_frontalface_default.xml'
@@ -76,15 +80,14 @@ def gen_frames(mode='attendance'):
             face = gray[y:y + h, x:x + w]
             face_resize = cv2.resize(face, (im_width, im_height))
             
-            # Sesudah:
             if mode == 'attendance' and model:
                 prediction = model.predict(face_resize)
                 name = names[prediction[0]] if prediction[1] < 90 else "Unknown"
                 if name != "Unknown" and name not in logged_faces:
                     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
                     photo_filename = f"{name}_{today}_{timestamp.replace(':', '-')}.png"
-                    os.makedirs('logIMG', exist_ok=True)  # Buat folder logIMG jika belum ada
-                    photo_path = os.path.join('logIMG', photo_filename)  # Simpan di logIMG
+                    os.makedirs('logIMG', exist_ok=True)
+                    photo_path = os.path.join('logIMG', photo_filename)
                     cv2.imwrite(photo_path, face_resize)
                     log_attendance(name, today, timestamp, photo_path)
                     logged_faces.add(name)
@@ -138,7 +141,85 @@ def stop():
 def video_feed(mode):
     return Response(gen_frames(mode), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# Tambahkan endpoint untuk menyajikan file dari root
+@app.route('/export_csv/<date>', methods=['GET'])
+def export_csv(date):
+    log = {}
+    if os.path.exists('attendance_log.json'):
+        with open('attendance_log.json', 'r') as f:
+            log = json.load(f)
+    
+    if date not in log:
+        return jsonify({'error': 'No records for this date'}), 404
+    
+    # Filter earliest record per person
+    earliest_records = {}
+    for record in log[date]:
+        name = record['name']
+        time = record['time']
+        if name not in earliest_records or time < earliest_records[name]['time']:
+            earliest_records[name] = record
+    
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Attendance {date}"
+    
+    # Define headers
+    headers = ['Date', 'Name', 'Time', 'Photo']
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col)
+        cell.value = header
+    
+    # Define border style (0.5pt)
+    thin_border = Border(
+        left=Side(style='thin', color='000000'),
+        right=Side(style='thin', color='000000'),
+        top=Side(style='thin', color='000000'),
+        bottom=Side(style='thin', color='000000')
+    )
+    
+    # Add data and images
+    for row, record in enumerate(earliest_records.values(), 2):
+        # Write data
+        ws.cell(row=row, column=1).value = date
+        ws.cell(row=row, column=2).value = record['name']
+        ws.cell(row=row, column=3).value = record['time']
+        
+        # Embed image
+        photo_path = record['photo']
+        if os.path.exists(photo_path):
+            img = Image(photo_path)
+            img.width = 50  # Adjust image size
+            img.height = 50
+            ws.add_image(img, f'D{row}')
+        
+        # Apply border and alignment to cells
+        for col in range(1, 5):
+            cell = ws.cell(row=row, column=col)
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='center', vertical='center', indent=1)  # Add padding via indent
+    
+    # Adjust column widths
+    ws.column_dimensions['A'].width = 15  # Date
+    ws.column_dimensions['B'].width = 15  # Name
+    ws.column_dimensions['C'].width = 15  # Time
+    ws.column_dimensions['D'].width = 15  # Photo
+    
+    # Adjust row heights to accommodate images
+    for row in range(2, len(earliest_records) + 2):
+        ws.row_dimensions[row].height = 60  # Adjust for image height
+    
+    # Save to BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return Response(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment;filename=attendance_{date}.xlsx'}
+    )
+
 from flask import send_from_directory
 
 @app.route('/<path:filename>')

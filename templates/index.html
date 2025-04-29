@@ -21,6 +21,7 @@
                 {% if log %}
                     {% for date, records in log.items() %}
                         <h4>{{ date }}</h4>
+                        <button onclick="exportCSV('{{ date }}')" class="export-btn" style="margin-bottom: 10px; background: #28a745;">Export to CSV</button>
                         <table>
                             <thead>
                                 <tr>
@@ -96,6 +97,10 @@
                     stopBtn.style.display = 'none';
                     location.reload();
                 });
+        }
+
+        function exportCSV(date) {
+            window.location.href = `/export_csv/${date}`;
         }
     </script>
 </body>
